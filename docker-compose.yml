@@ -6,26 +6,25 @@ services:
     image: dhg-hw-spec-collector:latest
     container_name: dhg-hw-spec-collector
 
+    # ── Report config ─────────────────────────────────────────────────────────
+    # REPORT_TYPE:   full | executive | gpu | storage | network | all
+    # REPORT_FORMAT: html | markdown | both
+    # SKIP_REPORT:   1 = CSV only, no report
+    environment:
+      REPORT_TYPE:   ${REPORT_TYPE:-full}
+      REPORT_FORMAT: ${REPORT_FORMAT:-html}
+      SKIP_REPORT:   ${SKIP_REPORT:-0}
+
     # ── Privileged access ─────────────────────────────────────────────────────
-    # Required for:
-    #   dmidecode  → BIOS/RAM slot detail
-    #   lspci      → PCI device tree
-    #   lm-sensors → thermal readings
-    # Without this, those sources fall back gracefully (psutil data still collected).
     privileged: true
+    pid: host
+    network_mode: host
 
     # ── Host hardware visibility ──────────────────────────────────────────────
-    pid: host        # See host processes (uptime, cpu stats)
-    network_mode: host  # See real network interfaces, not docker bridge
-
-    # ── Mount points ──────────────────────────────────────────────────────────
     volumes:
-      # Host hardware info sources
       - /proc:/proc:ro
       - /sys:/sys:ro
       - /run/udev:/run/udev:ro
-      # Output — CSV lands here on the host
       - ./output:/output
 
-    # ── Runtime ───────────────────────────────────────────────────────────────
-    restart: "no"   # Run once and exit
+    restart: "no"
