@@ -6,12 +6,16 @@ LABEL org.opencontainers.image.title="dhg-hw-spec-collector" \
       org.opencontainers.image.vendor="Digital Harmony Group" \
       org.opencontainers.image.licenses="MIT"
 
-# System tools for full Linux hardware data
+# System packages — matches manual install requirements exactly
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        python3 \
+        python3-pip \
         dmidecode \
-        pciutils \
         lm-sensors \
+        pciutils \
         lshw \
         iproute2 \
         procps && \
@@ -19,8 +23,9 @@ RUN apt-get update -qq && \
 
 WORKDIR /app
 
+# Python packages — matches manual install requirements exactly
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir psutil py-cpuinfo
 
 COPY scripts/  ./scripts/
 COPY reports/  ./reports/
