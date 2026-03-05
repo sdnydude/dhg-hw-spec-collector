@@ -113,7 +113,11 @@ def collect_node(node, generate_report=False):
 
     # 3 — Install deps if needed
     log(name, 'checking python deps')
-    dep_cmd = 'python3 -c "import psutil, cpuinfo" 2>/dev/null || pip3 install psutil py-cpuinfo --break-system-packages -q 2>/dev/null || pip install psutil py-cpuinfo -q 2>/dev/null'
+    # macOS: use --user or --break-system-packages depending on OS
+    if os_type == 'macos':
+        dep_cmd = 'python3 -c "import psutil, cpuinfo" 2>/dev/null || pip3 install psutil py-cpuinfo --user -q 2>/dev/null || pip3 install psutil py-cpuinfo -q 2>/dev/null'
+    else:
+        dep_cmd = 'python3 -c "import psutil, cpuinfo" 2>/dev/null || pip3 install psutil py-cpuinfo --break-system-packages -q 2>/dev/null || pip install psutil py-cpuinfo --break-system-packages -q 2>/dev/null'
     ssh(ip, user, dep_cmd, key=key, timeout=60)
 
     # 4 — Run collector
