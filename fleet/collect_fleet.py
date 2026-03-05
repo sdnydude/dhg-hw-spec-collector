@@ -105,7 +105,13 @@ def collect_node(node, generate_report=False):
     log(name, 'SSH OK — uploading collector')
 
     # 2 — Upload collector script
-    remote_script = f'/tmp/{collector}'
+    # Windows uses a different temp path
+    if os_type == 'windows':
+        remote_script = f'C:\Windows\Temp\{collector}'
+        remote_csv_glob = 'C:\Windows\Temp\hw_specs_*.csv'
+    else:
+        remote_script = f'/tmp/{collector}'
+        remote_csv_glob = '/tmp/hw_specs_*.csv'
     put = scp_put(str(script), user, ip, remote_script, key=key)
     if put.returncode != 0:
         log(name, f'Upload failed: {put.stderr.strip()}', '✗')
@@ -122,15 +128,25 @@ def collect_node(node, generate_report=False):
 
     # 4 — Run collector
     log(name, 'running collector...')
-    run_cmd = f'cd /tmp && python3 {remote_script}'
+    if os_type == 'windows':
+        run_cmd = f'python3 {remote_script}'
+    else:
+        run_cmd = f'cd /tmp && python3 {remote_script}'
     result  = ssh(ip, user, run_cmd, key=key, timeout=120)
     if result.returncode != 0:
         log(name, f'Collector failed: {result.stderr.strip()[:80]}', '✗')
         return {'node': name, 'status': 'collect_failed', 'ip': ip}
 
     # 5 — Find the CSV on the remote
-    find = ssh(ip, user, 'ls -t /tmp/hw_specs_*.csv 2>/dev/null | head -1', key=key)
-    csv_remote = find.stdout.strip()
+    if os_type == 'windows':
+        find = ssh(ip, user, f'dir /b /od C:\Windows\Temp\hw_specs_*.csv 2>nul', key=key)
+        # Get last line (most recent)
+        csv_lines = [l.strip() for l in find.stdout.strip().splitlines() if l.strip()]
+        find_result = f'C:\Windows\Temp\{csv_lines[-1]}' if csv_lines else ''
+    else:
+        find = ssh(ip, user, 'ls -t /tmp/hw_specs_*.csv 2>/dev/null | head -1', key=key)
+        find_result = find.stdout.strip()
+    csv_remote = find_result if os_type == 'windows' else find.stdout.strip()
     if not csv_remote:
         log(name, 'No CSV found on remote', '✗')
         return {'node': name, 'status': 'no_csv', 'ip': ip}
@@ -166,7 +182,10 @@ def collect_node(node, generate_report=False):
         log(name, f'{len(reports)} reports written')
 
     # 8 — Cleanup remote
-    ssh(ip, user, f'rm -f {csv_remote} {remote_script}', key=key)
+    if os_type == 'windows':
+        ssh(ip, user, f'del /f "{csv_remote}" "{remote_script}"', key=key)
+    else:
+        ssh(ip, user, f'rm -f {csv_remote} {remote_script}', key=key)
 
     return {
         'node':   name,
