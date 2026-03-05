@@ -80,9 +80,12 @@ def scp_get(remote_user, remote_ip, remote_path, local_dir, key=KEY_PATH):
 
 # ── Per-node collection ───────────────────────────────────────────────────────
 def collect_node(node, generate_report=False):
-    ip        = node['ip']
-    name      = node['name']
+    ip        = node.get('ip')
+    name      = node.get('name', ip)
     os_type   = node.get('os', 'linux')
+    if not ip:
+        log(str(name), 'skipping — no IP in hosts.yml', '✗')
+        return {'node': name, 'status': 'no_ip', 'ip': 'N/A'}
     user      = node.get('ssh_user', 'swebber64')
     key       = os.path.expanduser(node.get('key_path', KEY_PATH))
     collector = COLLECTOR_MAP.get(os_type, 'collect_linux.py')
