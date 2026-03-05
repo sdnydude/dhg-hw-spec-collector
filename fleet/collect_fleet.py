@@ -80,7 +80,7 @@ def scp_get(remote_user, remote_ip, remote_path, local_dir, key=KEY_PATH):
 
 # ── Per-node collection ───────────────────────────────────────────────────────
 def collect_node(node, generate_report=False):
-    ip        = node.get('ip')
+    ip        = node.get('ip') or node.get('host')
     name      = node.get('name', ip)
     os_type   = node.get('os', 'linux')
     if not ip:
