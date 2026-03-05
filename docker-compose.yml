@@ -1,0 +1,31 @@
+services:
+  hw-spec-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dhg-hw-spec-collector:latest
+    container_name: dhg-hw-spec-collector
+
+    # ── Privileged access ─────────────────────────────────────────────────────
+    # Required for:
+    #   dmidecode  → BIOS/RAM slot detail
+    #   lspci      → PCI device tree
+    #   lm-sensors → thermal readings
+    # Without this, those sources fall back gracefully (psutil data still collected).
+    privileged: true
+
+    # ── Host hardware visibility ──────────────────────────────────────────────
+    pid: host        # See host processes (uptime, cpu stats)
+    network_mode: host  # See real network interfaces, not docker bridge
+
+    # ── Mount points ──────────────────────────────────────────────────────────
+    volumes:
+      # Host hardware info sources
+      - /proc:/proc:ro
+      - /sys:/sys:ro
+      - /run/udev:/run/udev:ro
+      # Output — CSV lands here on the host
+      - ./output:/output
+
+    # ── Runtime ───────────────────────────────────────────────────────────────
+    restart: "no"   # Run once and exit

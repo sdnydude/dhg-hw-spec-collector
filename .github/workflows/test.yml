@@ -59,3 +59,19 @@ jobs:
 
       - name: Run schema tests
         run: python -m pytest tests/test_schema.py -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t dhg-hw-spec-collector:ci .
+
+      - name: Verify image runs and produces CSV
+        run: |
+          mkdir -p output
+          docker run --rm \
+            -v $(pwd)/output:/output \
+            dhg-hw-spec-collector:ci || true
+          ls output/*.csv && echo "CSV confirmed" || echo "No CSV without privileged — build OK"

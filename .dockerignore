@@ -1,0 +1,16 @@
+.git
+.github
+__pycache__
+*.py[cod]
+*.pyo
+output/
+hw_specs_*.csv
+.env
+*.key
+.venv
+venv
+.pytest_cache
+tests/
+docs/
+*.md
+LICENSE

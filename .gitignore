@@ -1,5 +1,6 @@
 # Output files
 hw_specs_*.csv
+output/
 
 # Python
 __pycache__/
