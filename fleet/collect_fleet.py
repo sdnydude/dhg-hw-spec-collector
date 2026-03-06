@@ -159,10 +159,10 @@ def collect_node(node, generate_report=False):
 
     # 5 — Find the CSV on the remote
     if os_type == 'windows':
-        find = ssh(ip, user, 'dir /b /od C:\\Windows\\Temp\\hw_specs_*.csv 2>nul', key=key)
+        find = ssh(ip, user, 'dir /b /od C:\\Users\\swebber64\\hw_specs_*.csv 2>nul', key=key)
         # Get last line (most recent)
         csv_lines = [l.strip() for l in find.stdout.strip().splitlines() if l.strip()]
-        find_result = ('C:\\Windows\\Temp\\' + csv_lines[-1]) if csv_lines else ''
+        find_result = ('C:\\Users\\swebber64\\' + csv_lines[-1]) if csv_lines else ''
     else:
         find = ssh(ip, user, 'ls -t /tmp/hw_specs_*.csv 2>/dev/null | head -1', key=key)
         find_result = find.stdout.strip()
@@ -203,7 +203,7 @@ def collect_node(node, generate_report=False):
 
     # 8 — Cleanup remote
     if os_type == 'windows':
-        ssh(ip, user, f'del /f "{csv_remote}" "{remote_script}"', key=key)
+        ssh(ip, user, f'del /f "{csv_remote}" "{remote_script}" 2>nul', key=key)
     else:
         ssh(ip, user, f'rm -f {csv_remote} {remote_script}', key=key)
 
