@@ -145,7 +145,7 @@ def collect_node(node, generate_report=False):
     # 4 — Run collector
     log(name, 'running collector...')
     if os_type == 'windows':
-        run_cmd = f'python3 C:\\Windows\\Temp\\{collector}'
+        run_cmd = 'py C:\\Windows\\Temp\\' + collector
     else:
         run_cmd = f'cd /tmp && python3 {remote_script}'
     result  = ssh(ip, user, run_cmd, key=key, timeout=120)
