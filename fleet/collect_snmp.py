@@ -19,43 +19,129 @@ SWITCHES = [
     {'host': '10.0.0.134', 'name': 'StudioDesk-4250-24',  'model': 'M4250-24'},
 ]
 
-# RFC 1213 / MIB-II system group
+# ──────────────────────────────────────────────
+# MIB-II  RFC 1213 — system group
+# ──────────────────────────────────────────────
 OIDS = {
-    'sysDescr':    '1.3.6.1.2.1.1.1.0',
+    'sysDescr':    '1.3.6.1.2.1.1.1.0',   # Full text description
+    'sysObjectID': '1.3.6.1.2.1.1.2.0',   # Enterprise OID
+    'sysUpTime':   '1.3.6.1.2.1.1.3.0',   # Centiseconds since last reinit
+    'sysContact':  '1.3.6.1.2.1.1.4.0',
     'sysName':     '1.3.6.1.2.1.1.5.0',
     'sysLocation': '1.3.6.1.2.1.1.6.0',
-    'sysContact':  '1.3.6.1.2.1.1.4.0',
-    'sysUpTime':   '1.3.6.1.2.1.1.3.0',
-    'ifNumber':    '1.3.6.1.2.1.2.1.0',
-    # NETGEAR enterprise MIB (1.3.6.1.4.1.4526)
-    'ng_model':      '1.3.6.1.4.1.4526.10.1.1.1.1.3.1',
-    'ng_swVersion':  '1.3.6.1.4.1.4526.10.1.1.1.1.4.1',
-    'ng_hwVersion':  '1.3.6.1.4.1.4526.10.1.1.1.1.5.1',
-    'ng_serialNum':  '1.3.6.1.4.1.4526.10.1.1.1.1.6.1',
+    'sysServices': '1.3.6.1.2.1.1.7.0',   # Layer bitmap (e.g. 78 = L2+L3)
+    # interfaces summary
+    'ifNumber':    '1.3.6.1.2.1.2.1.0',   # Total interface count
+    # dot1d bridge (STP)
+    'dot1dBaseBridgeAddress': '1.3.6.1.2.1.17.1.1.0',  # Switch base MAC
+    'dot1dBaseNumPorts':      '1.3.6.1.2.1.17.1.2.0',  # Physical port count
+    'dot1dStpProtocolSpecification': '1.3.6.1.2.1.17.2.1.0',  # STP variant
+    'dot1dStpRootCost':       '1.3.6.1.2.1.17.2.6.0',
+    'dot1dStpRootPort':       '1.3.6.1.2.1.17.2.7.0',
+    # IP MIB — routing / forwarding
+    'ipForwarding':  '1.3.6.1.2.1.4.1.0',   # 1=forwarding, 2=not-forwarding
+    'ipDefaultTTL':  '1.3.6.1.2.1.4.2.0',
+    # ──────────────────────────────────────────
+    # NETGEAR enterprise MIB  OID prefix: 1.3.6.1.4.1.4526
+    # ng10  = NETGEAR-SWITCHING-MIB  (.10)
+    # ──────────────────────────────────────────
+    # agentInventory — unit table (.10.1.1.1.1.x)
+    'ng_unitNum':     '1.3.6.1.4.1.4526.10.1.1.1.1.1.1',  # Unit number
+    'ng_unitType':    '1.3.6.1.4.1.4526.10.1.1.1.1.2.1',  # Unit type code
+    'ng_model':       '1.3.6.1.4.1.4526.10.1.1.1.1.3.1',  # Model string
+    'ng_swVersion':   '1.3.6.1.4.1.4526.10.1.1.1.1.4.1',  # Software version
+    'ng_hwVersion':   '1.3.6.1.4.1.4526.10.1.1.1.1.5.1',  # Hardware version
+    'ng_serialNum':   '1.3.6.1.4.1.4526.10.1.1.1.1.6.1',  # Serial number
+    'ng_mfgDate':     '1.3.6.1.4.1.4526.10.1.1.1.1.8.1',  # Manufacturing date
+    # agentSwitchCpuProcessTotalUtilization
+    'ng_cpuUtil1s':   '1.3.6.1.4.1.4526.10.1.36.1.0',     # CPU util 1-sec %
+    'ng_cpuUtil5s':   '1.3.6.1.4.1.4526.10.1.36.2.0',     # CPU util 5-sec %
+    'ng_cpuUtil1m':   '1.3.6.1.4.1.4526.10.1.36.3.0',     # CPU util 1-min %
+    # agentSwitchMemory
+    'ng_memTotal':    '1.3.6.1.4.1.4526.10.1.56.1.0',     # Total RAM (KB)
+    'ng_memFree':     '1.3.6.1.4.1.4526.10.1.56.2.0',     # Free  RAM (KB)
+    # agentSwitchTemperature
+    'ng_tempSensor':  '1.3.6.1.4.1.4526.10.1.53.1.1.3.1', # Temp °C unit 1
+    'ng_tempStatus':  '1.3.6.1.4.1.4526.10.1.53.1.1.4.1', # 1=normal,2=warning,3=critical
+    # agentSwitchFan
+    'ng_fanStatus1':  '1.3.6.1.4.1.4526.10.1.54.1.1.3.1', # Fan 1 status
+    'ng_fanStatus2':  '1.3.6.1.4.1.4526.10.1.54.1.1.3.2', # Fan 2 status
+    # agentPowerSupply
+    'ng_psu1Status':  '1.3.6.1.4.1.4526.10.1.55.1.1.3.1', # PSU 1 status
+    'ng_psu2Status':  '1.3.6.1.4.1.4526.10.1.55.1.1.3.2', # PSU 2 status
+    # PoE — agentPethMainPseObjects (.10.15.2.x)
+    'ng_poeMainPower':      '1.3.6.1.4.1.4526.10.15.2.1.1.2.1',  # Nominal power (W)
+    'ng_poeConsumedPower':  '1.3.6.1.4.1.4526.10.15.2.1.1.3.1',  # Consumed power (W)
+    'ng_poePowerStatus':    '1.3.6.1.4.1.4526.10.15.2.1.1.4.1',  # 1=on,2=off,3=faulty
+    # LLDP local system  (IEEE 802.1AB  MIB)
+    'lldpLocChassisIdSubtype': '1.0.8802.1.1.2.1.3.1.0',
+    'lldpLocChassisId':        '1.0.8802.1.1.2.1.3.2.0',
+    'lldpLocSysName':          '1.0.8802.1.1.2.1.3.3.0',
+    'lldpLocSysDesc':          '1.0.8802.1.1.2.1.3.4.0',
 }
 
-# RFC 2863 ifTable (1.3.6.1.2.1.2.2.1.x)
+# ──────────────────────────────────────────────
+# RFC 2863 ifTable (1.3.6.1.2.1.2.2.1.x) — per-port walk
+# ──────────────────────────────────────────────
 IF_OIDS = {
-    'ifDescr':       '1.3.6.1.2.1.2.2.1.2',
-    'ifType':        '1.3.6.1.2.1.2.2.1.3',
+    'ifDescr':       '1.3.6.1.2.1.2.2.1.2',   # Interface name (e.g. "0/1")
+    'ifType':        '1.3.6.1.2.1.2.2.1.3',   # 6=ethernetCsmacd, 161=ieee8023adLag
     'ifMtu':         '1.3.6.1.2.1.2.2.1.4',
-    'ifSpeed':       '1.3.6.1.2.1.2.2.1.5',
-    'ifPhysAddress': '1.3.6.1.2.1.2.2.1.6',
-    'ifAdminStatus': '1.3.6.1.2.1.2.2.1.7',
-    'ifOperStatus':  '1.3.6.1.2.1.2.2.1.8',
+    'ifSpeed':       '1.3.6.1.2.1.2.2.1.5',   # bps (32-bit; use ifHighSpeed for 1G+)
+    'ifPhysAddress': '1.3.6.1.2.1.2.2.1.6',   # MAC address
+    'ifAdminStatus': '1.3.6.1.2.1.2.2.1.7',   # 1=up 2=down 3=testing
+    'ifOperStatus':  '1.3.6.1.2.1.2.2.1.8',   # 1=up 2=down 3=testing …
+    'ifLastChange':  '1.3.6.1.2.1.2.2.1.9',   # Timeticks of last status change
     'ifInOctets':    '1.3.6.1.2.1.2.2.1.10',
+    'ifInUcastPkts': '1.3.6.1.2.1.2.2.1.11',
+    'ifInDiscards':  '1.3.6.1.2.1.2.2.1.13',
     'ifInErrors':    '1.3.6.1.2.1.2.2.1.14',
     'ifOutOctets':   '1.3.6.1.2.1.2.2.1.16',
+    'ifOutUcastPkts':'1.3.6.1.2.1.2.2.1.17',
+    'ifOutDiscards': '1.3.6.1.2.1.2.2.1.19',
     'ifOutErrors':   '1.3.6.1.2.1.2.2.1.20',
 }
 
-# IF-MIB ifXTable — 64-bit counters (RFC 2233)
+# ──────────────────────────────────────────────
+# IF-MIB ifXTable — 64-bit counters + names (RFC 2233)
+# ──────────────────────────────────────────────
 IFX_OIDS = {
-    'ifName':        '1.3.6.1.2.1.31.1.1.1.1',
-    'ifHighSpeed':   '1.3.6.1.2.1.31.1.1.1.15',
-    'ifHCInOctets':  '1.3.6.1.2.1.31.1.1.1.6',
-    'ifHCOutOctets': '1.3.6.1.2.1.31.1.1.1.10',
-    'ifAlias':       '1.3.6.1.2.1.31.1.1.1.18',
+    'ifName':           '1.3.6.1.2.1.31.1.1.1.1',   # Short name (e.g. "1/0/1")
+    'ifInMulticastPkts':'1.3.6.1.2.1.31.1.1.1.2',
+    'ifInBroadcastPkts':'1.3.6.1.2.1.31.1.1.1.3',
+    'ifOutMulticastPkts':'1.3.6.1.2.1.31.1.1.1.4',
+    'ifOutBroadcastPkts':'1.3.6.1.2.1.31.1.1.1.5',
+    'ifHCInOctets':     '1.3.6.1.2.1.31.1.1.1.6',   # 64-bit in bytes
+    'ifHCInUcastPkts':  '1.3.6.1.2.1.31.1.1.1.7',
+    'ifHCOutOctets':    '1.3.6.1.2.1.31.1.1.1.10',  # 64-bit out bytes
+    'ifHCOutUcastPkts': '1.3.6.1.2.1.31.1.1.1.11',
+    'ifHighSpeed':      '1.3.6.1.2.1.31.1.1.1.15',  # Mbps (use this for 1G/2.5G/10G)
+    'ifPromiscuousMode':'1.3.6.1.2.1.31.1.1.1.16',
+    'ifAlias':          '1.3.6.1.2.1.31.1.1.1.18',  # Admin-assigned description
+    'ifCounterDiscontinuityTime': '1.3.6.1.2.1.31.1.1.1.19',
+}
+
+# ──────────────────────────────────────────────
+# dot3 Ethernet-like MIB (RFC 3635) — per-port walk
+# ──────────────────────────────────────────────
+DOT3_OIDS = {
+    'dot3StatsFCSErrors':          '1.3.6.1.2.1.10.7.2.1.3',
+    'dot3StatsSingleCollisionFrames':'1.3.6.1.2.1.10.7.2.1.4',
+    'dot3StatsMultipleCollisionFrames':'1.3.6.1.2.1.10.7.2.1.5',
+    'dot3StatsDeferredTransmissions':'1.3.6.1.2.1.10.7.2.1.7',
+    'dot3StatsLateCollisions':     '1.3.6.1.2.1.10.7.2.1.8',
+    'dot3StatsExcessiveCollisions':'1.3.6.1.2.1.10.7.2.1.9',
+    'dot3StatsInternalMacTransmitErrors':'1.3.6.1.2.1.10.7.2.1.10',
+    'dot3StatsFrameTooLong':       '1.3.6.1.2.1.10.7.2.1.13',
+}
+
+# ──────────────────────────────────────────────
+# IEEE 802.3az EEE / MAU MIB — link speed negotiated
+# ──────────────────────────────────────────────
+MAU_OIDS = {
+    'ifMauType':     '1.3.6.1.2.1.26.2.1.1.3',  # MAU type OID (speed+duplex)
+    'ifMauStatus':   '1.3.6.1.2.1.26.2.1.1.4',  # 1=other,2=unknown,3=operational
+    'ifMauMediaAvailable': '1.3.6.1.2.1.26.2.1.1.5',
 }
 
 IF_STATUS = {1:'up', 2:'down', 3:'testing', 4:'unknown', 5:'dormant', 6:'notPresent', 7:'lowerLayerDown'}
@@ -152,9 +238,41 @@ def collect_switch(switch, community):
 
     row('Interfaces', 'total_interfaces', snmp_get(host, community, OIDS['ifNumber']) or '0')
 
+    # NETGEAR health — CPU, memory, temperature, fans, PSUs, PoE
+    health_keys = ['ng_cpuUtil1s','ng_cpuUtil5s','ng_cpuUtil1m',
+                   'ng_memTotal','ng_memFree',
+                   'ng_tempSensor','ng_tempStatus',
+                   'ng_fanStatus1','ng_fanStatus2',
+                   'ng_psu1Status','ng_psu2Status',
+                   'ng_poeMainPower','ng_poeConsumedPower','ng_poePowerStatus']
+    for key in health_keys:
+        if key in OIDS:
+            val = snmp_get(host, community, OIDS[key])
+            if val is not None:
+                cat = ('PoE'        if 'poe'  in key else
+                       'Health.Temp' if 'temp' in key else
+                       'Health.Fan'  if 'fan'  in key else
+                       'Health.PSU'  if 'psu'  in key else
+                       'Health.CPU'  if 'cpu'  in key else
+                       'Health.Mem')
+                unit = ('%' if 'Util' in key else
+                        'KB' if key in ('ng_memTotal','ng_memFree') else
+                        'C'  if key == 'ng_tempSensor' else
+                        'W'  if 'Power' in key else '')
+                row(cat, key.replace('ng_',''), val, unit)
+
+    # LLDP local info
+    for key in ('lldpLocChassisId','lldpLocSysName','lldpLocSysDesc'):
+        if key in OIDS:
+            val = snmp_get(host, community, OIDS[key])
+            if val is not None:
+                row('LLDP', key, val)
+
     # Interface tables
-    if_data  = {k: snmp_walk(host, community, v) for k, v in IF_OIDS.items()}
-    ifx_data = {k: snmp_walk(host, community, v) for k, v in IFX_OIDS.items()}
+    if_data   = {k: snmp_walk(host, community, v) for k, v in IF_OIDS.items()}
+    ifx_data  = {k: snmp_walk(host, community, v) for k, v in IFX_OIDS.items()}
+    dot3_data = {k: snmp_walk(host, community, v) for k, v in DOT3_OIDS.items()}
+    mau_data  = {k: snmp_walk(host, community, v) for k, v in MAU_OIDS.items()}
 
     up = down = 0
     idxs = sorted(if_data.get('ifDescr', {}).keys(),
@@ -210,6 +328,22 @@ def collect_switch(switch, community):
         row('Interfaces', f'{p}_out_octets', out_oct, 'bytes')
         row('Interfaces', f'{p}_in_errors',  in_err)
         row('Interfaces', f'{p}_out_errors', out_err)
+
+        # dot3 error counters
+        fcs = fmt(dot3_data.get('dot3StatsFCSErrors',{}).get(idx,''))
+        late = fmt(dot3_data.get('dot3StatsLateCollisions',{}).get(idx,''))
+        exc  = fmt(dot3_data.get('dot3StatsExcessiveCollisions',{}).get(idx,''))
+        frame_long = fmt(dot3_data.get('dot3StatsFrameTooLong',{}).get(idx,''))
+        if fcs:       row('Interfaces', f'{p}_fcs_errors',  fcs)
+        if late:      row('Interfaces', f'{p}_late_collisions', late)
+        if exc:       row('Interfaces', f'{p}_excess_collisions', exc)
+        if frame_long:row('Interfaces', f'{p}_frame_too_long', frame_long)
+
+        # MAU (negotiated link type)
+        mau_type = fmt(mau_data.get('ifMauType',{}).get(idx,''))
+        mau_stat = fmt(mau_data.get('ifMauStatus',{}).get(idx,''))
+        if mau_type: row('Interfaces', f'{p}_mau_type',   mau_type)
+        if mau_stat: row('Interfaces', f'{p}_mau_status', mau_stat)
 
         if status == 'up':    up += 1
         elif status == 'down': down += 1
