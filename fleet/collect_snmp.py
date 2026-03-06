@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-DHG SNMP Collector — uses puresnmp (synchronous, no legacy deps)
+DHG SNMP Collector — puresnmp v2 async (SNMPv2c)
 Usage:
     python3 fleet/collect_snmp.py
     python3 fleet/collect_snmp.py --host 10.0.0.4
     python3 fleet/collect_snmp.py --community public
 """
-import argparse, csv, datetime, subprocess, sys
+import argparse, asyncio, csv, datetime, subprocess, sys
 from pathlib import Path
 
 ROOT      = Path(__file__).parent.parent
@@ -19,64 +19,105 @@ SWITCHES = [
     {'host': '10.0.0.134', 'name': 'StudioDesk-4250-24',  'model': 'M4250-24'},
 ]
 
+# RFC 1213 / MIB-II system group
 OIDS = {
     'sysDescr':    '1.3.6.1.2.1.1.1.0',
     'sysName':     '1.3.6.1.2.1.1.5.0',
     'sysLocation': '1.3.6.1.2.1.1.6.0',
+    'sysContact':  '1.3.6.1.2.1.1.4.0',
     'sysUpTime':   '1.3.6.1.2.1.1.3.0',
     'ifNumber':    '1.3.6.1.2.1.2.1.0',
-    'ng_model':     '1.3.6.1.4.1.4526.10.1.1.1.1.3.1',
-    'ng_swVersion': '1.3.6.1.4.1.4526.10.1.1.1.1.4.1',
-    'ng_hwVersion': '1.3.6.1.4.1.4526.10.1.1.1.1.5.1',
-    'ng_serialNum': '1.3.6.1.4.1.4526.10.1.1.1.1.6.1',
+    # NETGEAR enterprise MIB (1.3.6.1.4.1.4526)
+    'ng_model':      '1.3.6.1.4.1.4526.10.1.1.1.1.3.1',
+    'ng_swVersion':  '1.3.6.1.4.1.4526.10.1.1.1.1.4.1',
+    'ng_hwVersion':  '1.3.6.1.4.1.4526.10.1.1.1.1.5.1',
+    'ng_serialNum':  '1.3.6.1.4.1.4526.10.1.1.1.1.6.1',
 }
 
+# RFC 2863 ifTable (1.3.6.1.2.1.2.2.1.x)
 IF_OIDS = {
-    'ifDescr':      '1.3.6.1.2.1.2.2.1.2',
-    'ifOperStatus': '1.3.6.1.2.1.2.2.1.8',
-    'ifSpeed':      '1.3.6.1.2.1.2.2.1.5',
-    'ifInOctets':   '1.3.6.1.2.1.2.2.1.10',
-    'ifOutOctets':  '1.3.6.1.2.1.2.2.1.16',
+    'ifDescr':       '1.3.6.1.2.1.2.2.1.2',
+    'ifType':        '1.3.6.1.2.1.2.2.1.3',
+    'ifMtu':         '1.3.6.1.2.1.2.2.1.4',
+    'ifSpeed':       '1.3.6.1.2.1.2.2.1.5',
+    'ifPhysAddress': '1.3.6.1.2.1.2.2.1.6',
+    'ifAdminStatus': '1.3.6.1.2.1.2.2.1.7',
+    'ifOperStatus':  '1.3.6.1.2.1.2.2.1.8',
+    'ifInOctets':    '1.3.6.1.2.1.2.2.1.10',
+    'ifInErrors':    '1.3.6.1.2.1.2.2.1.14',
+    'ifOutOctets':   '1.3.6.1.2.1.2.2.1.16',
+    'ifOutErrors':   '1.3.6.1.2.1.2.2.1.20',
 }
-IF_STATUS = {1:'up', 2:'down', 3:'testing', 4:'unknown', 5:'dormant'}
+
+# IF-MIB ifXTable — 64-bit counters (RFC 2233)
+IFX_OIDS = {
+    'ifName':        '1.3.6.1.2.1.31.1.1.1.1',
+    'ifHighSpeed':   '1.3.6.1.2.1.31.1.1.1.15',
+    'ifHCInOctets':  '1.3.6.1.2.1.31.1.1.1.6',
+    'ifHCOutOctets': '1.3.6.1.2.1.31.1.1.1.10',
+    'ifAlias':       '1.3.6.1.2.1.31.1.1.1.18',
+}
+
+IF_STATUS = {1:'up', 2:'down', 3:'testing', 4:'unknown', 5:'dormant', 6:'notPresent', 7:'lowerLayerDown'}
+IF_TYPE   = {6:'ethernet', 161:'lag', 24:'loopback', 131:'tunnel', 1:'other'}
 
 
 def ensure_puresnmp():
     try:
-        import puresnmp  # noqa
-        return True
+        import puresnmp; return True  # noqa
     except ImportError:
         print('[SNMP] Installing puresnmp...')
         for flag in ['--user', '--break-system-packages']:
-            r = subprocess.run(
-                [sys.executable, '-m', 'pip', 'install', 'puresnmp', flag, '-q'],
-                capture_output=True)
-            if r.returncode == 0:
-                return True
+            r = subprocess.run([sys.executable, '-m', 'pip', 'install', 'puresnmp', flag, '-q'],
+                               capture_output=True)
+            if r.returncode == 0: return True
         return False
 
 
-def snmp_get(host, community, oid, timeout=3):
+async def _aget(host, community, oid):
+    from puresnmp import Client, V2C
+    from x690.types import ObjectIdentifier
+    client = Client(host, V2C(community))
     try:
-        from puresnmp import Client, V2C
-        with Client(host, V2C(community), timeout=timeout) as client:
-            val = client.get(oid)
-        return str(val) if val is not None else None
+        return await client.get(ObjectIdentifier(oid))
     except Exception:
         return None
 
 
-def snmp_walk(host, community, oid, timeout=3):
+async def _awalk(host, community, base_oid):
+    from puresnmp import Client, V2C
+    from x690.types import ObjectIdentifier
     results = {}
+    client = Client(host, V2C(community))
     try:
-        from puresnmp import Client, V2C
-        with Client(host, V2C(community), timeout=timeout) as client:
-            for item in client.walk(oid):
-                idx = str(item.oid).split('.')[-1]
-                results[idx] = str(item.value)
+        async for oid, val in client.walk(ObjectIdentifier(base_oid)):
+            idx = str(oid).split('.')[-1]
+            results[idx] = val
     except Exception:
         pass
     return results
+
+
+def snmp_get(host, community, oid):
+    return asyncio.run(_aget(host, community, oid))
+
+
+def snmp_walk(host, community, base_oid):
+    return asyncio.run(_awalk(host, community, base_oid))
+
+
+def fmt(val):
+    if val is None: return ''
+    if isinstance(val, (bytes, bytearray)):
+        try: return val.decode('utf-8', errors='replace').strip('\x00')
+        except Exception: return val.hex(':')
+    return str(val)
+
+
+def fmt_mac(val):
+    if isinstance(val, (bytes, bytearray)) and len(val) == 6:
+        return ':'.join(f'{b:02x}' for b in val)
+    return fmt(val)
 
 
 def collect_switch(switch, community):
@@ -86,75 +127,110 @@ def collect_switch(switch, community):
     ts   = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     def row(cat, key, val, unit=''):
-        rows.append({'category': cat, 'key': key,
-                     'value': str(val) if val else '', 'unit': unit, 'source': 'snmp'})
+        rows.append({'category': cat, 'key': key, 'value': fmt(val), 'unit': unit, 'source': 'snmp_v2c'})
 
-    print(f'  · {name:36s} polling {host}...')
+    print(f'  . {name:36s} polling {host}...')
 
-    # System OIDs
+    # System group
     for key, oid in OIDS.items():
-        if key.startswith('ng_') or key == 'ifNumber':
-            continue
+        if key.startswith('ng_') or key == 'ifNumber': continue
         val = snmp_get(host, community, oid)
-        if val:
+        if val is not None:
             if key == 'sysUpTime':
                 try:
-                    s = int(val) // 100
-                    val = f'{s//86400}d {(s%86400)//3600}h {(s%3600)//60}m'
-                except Exception:
-                    pass
+                    s = int(str(val)) // 100
+                    val = f'{s//86400}d {(s%86400)//3600}h {(s%3600)//60}m {s%60}s'
+                except Exception: pass
             row('System', key, val)
 
     # NETGEAR OIDs
     for key, oid in OIDS.items():
-        if not key.startswith('ng_'):
-            continue
+        if not key.startswith('ng_'): continue
         val = snmp_get(host, community, oid)
-        if val:
-            row('Hardware', key.replace('ng_', ''), val)
+        if val is not None:
+            row('Hardware', key.replace('ng_',''), val)
 
-    row('Interfaces', 'total_interfaces',
-        snmp_get(host, community, OIDS['ifNumber']) or '0')
+    row('Interfaces', 'total_interfaces', snmp_get(host, community, OIDS['ifNumber']) or '0')
 
-    # Interface walk
-    if_data = {k: snmp_walk(host, community, v) for k, v in IF_OIDS.items()}
+    # Interface tables
+    if_data  = {k: snmp_walk(host, community, v) for k, v in IF_OIDS.items()}
+    ifx_data = {k: snmp_walk(host, community, v) for k, v in IFX_OIDS.items()}
+
     up = down = 0
-    for idx, descr in if_data['ifDescr'].items():
+    idxs = sorted(if_data.get('ifDescr', {}).keys(),
+                  key=lambda x: int(x) if x.isdigit() else 0)
+
+    for idx in idxs:
+        descr   = fmt(if_data['ifDescr'].get(idx, ''))
+        if_name = fmt(ifx_data['ifName'].get(idx, descr))
+        alias   = fmt(ifx_data['ifAlias'].get(idx, ''))
+        mac     = fmt_mac(if_data['ifPhysAddress'].get(idx, b''))
+
         try:
-            status = IF_STATUS.get(int(if_data['ifOperStatus'].get(idx, '2')), 'unknown')
+            if_type = IF_TYPE.get(int(str(if_data['ifType'].get(idx,1))), 'other')
+        except Exception:
+            if_type = 'other'
+
+        try:
+            status = IF_STATUS.get(int(str(if_data['ifOperStatus'].get(idx,'2'))), 'unknown')
         except Exception:
             status = 'unknown'
+
         try:
-            mbps = int(if_data['ifSpeed'].get(idx, '0')) // 1_000_000
-            speed = f'{mbps} Mbps' if mbps else '—'
+            admin = IF_STATUS.get(int(str(if_data['ifAdminStatus'].get(idx,'2'))), 'unknown')
         except Exception:
-            speed = '—'
-        row('Interfaces', f'port{idx}_name',       descr)
-        row('Interfaces', f'port{idx}_status',     status)
-        row('Interfaces', f'port{idx}_speed',      speed)
-        row('Interfaces', f'port{idx}_in_octets',  if_data['ifInOctets'].get(idx,'0'),  'bytes')
-        row('Interfaces', f'port{idx}_out_octets', if_data['ifOutOctets'].get(idx,'0'), 'bytes')
+            admin = 'unknown'
+
+        try:
+            hs = int(str(ifx_data['ifHighSpeed'].get(idx,'0')))
+            speed = f'{hs} Mbps' if hs else '—'
+        except Exception:
+            try:
+                speed = f'{int(str(if_data["ifSpeed"].get(idx,"0")))//1_000_000} Mbps'
+            except Exception:
+                speed = '—'
+
+        in_oct  = fmt(ifx_data['ifHCInOctets'].get(idx) or if_data['ifInOctets'].get(idx,'0'))
+        out_oct = fmt(ifx_data['ifHCOutOctets'].get(idx) or if_data['ifOutOctets'].get(idx,'0'))
+        in_err  = fmt(if_data['ifInErrors'].get(idx,'0'))
+        out_err = fmt(if_data['ifOutErrors'].get(idx,'0'))
+        mtu     = fmt(if_data['ifMtu'].get(idx,''))
+
+        p = f'port{idx}'
+        row('Interfaces', f'{p}_name',       if_name)
+        row('Interfaces', f'{p}_descr',      descr)
+        row('Interfaces', f'{p}_alias',      alias)
+        row('Interfaces', f'{p}_type',       if_type)
+        row('Interfaces', f'{p}_mac',        mac)
+        row('Interfaces', f'{p}_admin',      admin)
+        row('Interfaces', f'{p}_status',     status)
+        row('Interfaces', f'{p}_speed',      speed)
+        row('Interfaces', f'{p}_mtu',        mtu)
+        row('Interfaces', f'{p}_in_octets',  in_oct,  'bytes')
+        row('Interfaces', f'{p}_out_octets', out_oct, 'bytes')
+        row('Interfaces', f'{p}_in_errors',  in_err)
+        row('Interfaces', f'{p}_out_errors', out_err)
+
         if status == 'up':    up += 1
         elif status == 'down': down += 1
 
     row('Interfaces', 'ports_up',   str(up))
     row('Interfaces', 'ports_down', str(down))
 
-    out_dir = FLEET_OUT / name
+    out_dir  = FLEET_OUT / name
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / f'hw_specs_{name}_{ts}.csv'
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['category','key','value','unit','source'])
-        writer.writeheader()
-        writer.writerows(rows)
+        w = csv.DictWriter(f, fieldnames=['category','key','value','unit','source'])
+        w.writeheader(); w.writerows(rows)
 
-    print(f'  {"✓" if rows else "✗"} {name:36s} {len(rows)} rows  (up:{up} down:{down})  '
-          f'→ {csv_path.name}')
+    status_sym = 'ok' if rows else 'FAIL'
+    print(f'  [{status_sym}] {name:36s} {len(rows)} rows  (up:{up} down:{down})  -> {csv_path.name}')
     return csv_path
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='DHG SNMP Collector (SNMPv2c)')
     parser.add_argument('--community', '-c', default=DEFAULT_COMMUNITY)
     parser.add_argument('--host',      '-H', default=None)
     args = parser.parse_args()
@@ -162,7 +238,7 @@ def main():
     if not ensure_puresnmp():
         print('[SNMP] ERROR: could not install puresnmp'); sys.exit(1)
 
-    print(f'\n[DHG SNMP] community: {args.community}\n')
+    print(f'\n[DHG SNMP] SNMPv2c  community: {args.community}\n')
     FLEET_OUT.mkdir(parents=True, exist_ok=True)
 
     targets = SWITCHES
@@ -176,9 +252,9 @@ def main():
             collect_switch(sw, args.community)
             ok += 1
         except Exception as e:
-            print(f'  ✗ {sw["name"]:36s} FAILED: {e}')
+            print(f'  [FAIL] {sw["name"]:36s} {e}')
 
-    print(f'\n[DHG SNMP] Done — {ok}/{len(targets)} collected')
+    print(f'\n[DHG SNMP] Done -- {ok}/{len(targets)} collected')
     if ok > 0:
         print('[DHG SNMP] Run fleet_report.py to include switches in fleet report')
 
