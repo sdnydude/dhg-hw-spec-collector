@@ -135,8 +135,12 @@ def collect_node(node, generate_report=False):
 
     # 3 — Install deps if needed
     log(name, 'checking python deps')
-    # macOS: use --user or --break-system-packages depending on OS
-    if os_type == 'macos':
+    WINPY = 'C:\\Users\\Dunrs\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
+    WINPIP = 'C:\\Users\\Dunrs\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\pip.exe'
+
+    if os_type == 'windows':
+        dep_cmd = f'{WINPY} -c "import psutil, cpuinfo" 2>nul || {WINPIP} install psutil py-cpuinfo -q 2>nul'
+    elif os_type == 'macos':
         dep_cmd = 'python3 -c "import psutil, cpuinfo" 2>/dev/null || pip3 install psutil py-cpuinfo --user -q 2>/dev/null || pip3 install psutil py-cpuinfo -q 2>/dev/null'
     else:
         dep_cmd = 'python3 -c "import psutil, cpuinfo" 2>/dev/null || pip3 install psutil py-cpuinfo --break-system-packages -q 2>/dev/null || pip install psutil py-cpuinfo --break-system-packages -q 2>/dev/null'
@@ -145,7 +149,7 @@ def collect_node(node, generate_report=False):
     # 4 — Run collector
     log(name, 'running collector...')
     if os_type == 'windows':
-        run_cmd = 'python C:\\Windows\\Temp\\' + collector
+        run_cmd = f'{WINPY} C:\\Windows\\Temp\\' + collector
     else:
         run_cmd = f'cd /tmp && python3 {remote_script}'
     result  = ssh(ip, user, run_cmd, key=key, timeout=120)
