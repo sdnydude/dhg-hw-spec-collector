@@ -58,8 +58,9 @@ def ensure_puresnmp():
 
 def snmp_get(host, community, oid, timeout=3):
     try:
-        from puresnmp import get
-        val = get(host, community, oid, timeout=timeout)
+        from puresnmp import Client, V2C
+        with Client(host, V2C(community), timeout=timeout) as client:
+            val = client.get(oid)
         return str(val) if val is not None else None
     except Exception:
         return None
@@ -68,10 +69,11 @@ def snmp_get(host, community, oid, timeout=3):
 def snmp_walk(host, community, oid, timeout=3):
     results = {}
     try:
-        from puresnmp import walk
-        for item in walk(host, community, oid, timeout=timeout):
-            idx = str(item.oid).split('.')[-1]
-            results[idx] = str(item.value)
+        from puresnmp import Client, V2C
+        with Client(host, V2C(community), timeout=timeout) as client:
+            for item in client.walk(oid):
+                idx = str(item.oid).split('.')[-1]
+                results[idx] = str(item.value)
     except Exception:
         pass
     return results
