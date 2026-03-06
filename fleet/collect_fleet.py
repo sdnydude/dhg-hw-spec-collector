@@ -173,7 +173,9 @@ def collect_node(node, generate_report=False):
 
     # 6 — Pull CSV back
     log(name, f'pulling CSV → fleet_output/{name}/')
-    get = scp_get(user, ip, csv_remote, str(out_dir), key=key)
+    # SCP requires forward slashes even on Windows
+    scp_path = csv_remote.replace('\\', '/') if os_type == 'windows' else csv_remote
+    get = scp_get(user, ip, scp_path, str(out_dir), key=key)
     if get.returncode != 0:
         log(name, f'SCP pull failed: {get.stderr.strip()}', '✗')
         return {'node': name, 'status': 'pull_failed', 'ip': ip}
