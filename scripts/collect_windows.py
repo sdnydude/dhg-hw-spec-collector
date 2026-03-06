@@ -260,7 +260,7 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"[HW-SPEC Windows] Done. {len(rows)} rows written → {filename}")
+    print(f"[HW-SPEC Windows] Done. {len(rows)} rows written to {filename}")
     return filename
 
 if __name__ == '__main__':
