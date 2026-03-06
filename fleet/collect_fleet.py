@@ -107,8 +107,8 @@ def collect_node(node, generate_report=False):
     # 2 — Upload collector script
     # Windows uses a different temp path
     if os_type == 'windows':
-        remote_script = f'C:\Windows\Temp\{collector}'
-        remote_csv_glob = 'C:\Windows\Temp\hw_specs_*.csv'
+        remote_script = 'C:\\Windows\\Temp\\' + collector
+        remote_csv_glob = 'C:\\Windows\\Temp\\hw_specs_*.csv'
     else:
         remote_script = f'/tmp/{collector}'
         remote_csv_glob = '/tmp/hw_specs_*.csv'
@@ -129,7 +129,7 @@ def collect_node(node, generate_report=False):
     # 4 — Run collector
     log(name, 'running collector...')
     if os_type == 'windows':
-        run_cmd = f'python3 {remote_script}'
+        run_cmd = f'python3 C:\\Windows\\Temp\\{collector}'
     else:
         run_cmd = f'cd /tmp && python3 {remote_script}'
     result  = ssh(ip, user, run_cmd, key=key, timeout=120)
@@ -139,10 +139,10 @@ def collect_node(node, generate_report=False):
 
     # 5 — Find the CSV on the remote
     if os_type == 'windows':
-        find = ssh(ip, user, f'dir /b /od C:\Windows\Temp\hw_specs_*.csv 2>nul', key=key)
+        find = ssh(ip, user, 'dir /b /od C:\\Windows\\Temp\\hw_specs_*.csv 2>nul', key=key)
         # Get last line (most recent)
         csv_lines = [l.strip() for l in find.stdout.strip().splitlines() if l.strip()]
-        find_result = f'C:\Windows\Temp\{csv_lines[-1]}' if csv_lines else ''
+        find_result = ('C:\\Windows\\Temp\\' + csv_lines[-1]) if csv_lines else ''
     else:
         find = ssh(ip, user, 'ls -t /tmp/hw_specs_*.csv 2>/dev/null | head -1', key=key)
         find_result = find.stdout.strip()
