@@ -26,7 +26,7 @@ SCRIPTS_DIR = ROOT / 'scripts'
 REPORTS_DIR = ROOT / 'reports'
 HOSTS_FILE  = ROOT / 'fleet' / 'hosts.yml'
 OUTPUT_DIR  = ROOT / 'fleet_output'
-KEY_PATH    = os.path.expanduser('~/.ssh/dhg_fleet')
+KEY_PATH    = os.environ.get('SSH_KEY', os.path.expanduser('~/.ssh/dhg_fleet'))
 
 COLLECTOR_MAP = {
     'linux':  'collect_linux.py',

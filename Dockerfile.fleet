@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="dhg-fleet-collector" \
+      org.opencontainers.image.description="DHG fleet SSH + SNMP collector — OS agnostic" \
+      org.opencontainers.image.vendor="Digital Harmony Group"
+
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends \
+        openssh-client \
+        && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Python deps — fleet collector only
+RUN pip install --no-cache-dir \
+    pyyaml \
+    puresnmp
+
+COPY fleet/   ./fleet/
+COPY scripts/ ./scripts/
+
+RUN mkdir -p /output /app/fleet_output
+
+# SSH key injected at runtime via secret or volume mount
+# docker run -v ~/.ssh/dhg_fleet:/root/.ssh/dhg_fleet:ro ...
+ENV SSH_KEY=/root/.ssh/dhg_fleet
+ENV FLEET_MODE=fleet
+
+ENTRYPOINT ["python3"]
+CMD ["fleet/collect_fleet.py"]

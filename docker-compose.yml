@@ -1,30 +1,69 @@
+###############################################################################
+# DHG Hardware Spec Collector — Docker Compose
+# OS-agnostic. Works on Linux, macOS, Windows (Docker Desktop).
+#
+# Usage:
+#   Fleet collection + report:
+#     docker compose run --rm fleet
+#     docker compose run --rm snmp
+#     docker compose run --rm report
+#
+#   Local node (Linux only — needs /proc /sys):
+#     docker compose run --rm local
+#
+# SSH key: set SSH_KEY_PATH in .env or export before running
+#   export SSH_KEY_PATH=~/.ssh/dhg_fleet
+###############################################################################
+
+x-fleet-base: &fleet-base
+  build:
+    context: .
+    dockerfile: Dockerfile.fleet
+  volumes:
+    - ./fleet_output:/app/fleet_output
+    - ./fleet/hosts.yml:/app/fleet/hosts.yml:ro
+    - ${SSH_KEY_PATH:-~/.ssh/dhg_fleet}:/run/secrets/dhg_fleet:ro
+  environment:
+    SSH_KEY: /run/secrets/dhg_fleet
+  network_mode: host
+  restart: "no"
+
 services:
-  hw-spec-collector:
+
+  # ── Fleet SSH collector ────────────────────────────────────────────────────
+  fleet:
+    <<: *fleet-base
+    container_name: dhg-fleet-collector
+    command: ["python3", "fleet/collect_fleet.py"]
+
+  # ── SNMP switch collector ─────────────────────────────────────────────────
+  snmp:
+    <<: *fleet-base
+    container_name: dhg-snmp-collector
+    command: ["python3", "fleet/collect_snmp.py"]
+
+  # ── Fleet HTML report generator ───────────────────────────────────────────
+  report:
+    <<: *fleet-base
+    container_name: dhg-fleet-report
+    command: ["python3", "fleet/fleet_report.py"]
+
+  # ── Local node collector (Linux only) ─────────────────────────────────────
+  local:
     build:
       context: .
       dockerfile: Dockerfile
-    image: dhg-hw-spec-collector:latest
-    container_name: dhg-hw-spec-collector
-
-    # ── Report config ─────────────────────────────────────────────────────────
-    # REPORT_TYPE:   full | executive | gpu | storage | network | all
-    # REPORT_FORMAT: html | markdown | both
-    # SKIP_REPORT:   1 = CSV only, no report
-    environment:
-      REPORT_TYPE:   ${REPORT_TYPE:-full}
-      REPORT_FORMAT: ${REPORT_FORMAT:-html}
-      SKIP_REPORT:   ${SKIP_REPORT:-0}
-
-    # ── Privileged access ─────────────────────────────────────────────────────
+    container_name: dhg-local-collector
     privileged: true
     pid: host
     network_mode: host
-
-    # ── Host hardware visibility ──────────────────────────────────────────────
     volumes:
       - /proc:/proc:ro
       - /sys:/sys:ro
       - /run/udev:/run/udev:ro
       - ./output:/output
-
+    environment:
+      REPORT_TYPE:   ${REPORT_TYPE:-full}
+      REPORT_FORMAT: ${REPORT_FORMAT:-html}
+      SKIP_REPORT:   ${SKIP_REPORT:-0}
     restart: "no"
