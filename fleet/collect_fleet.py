@@ -43,28 +43,44 @@ def log(name, msg, icon='·'):
 
 def ssh(ip, user, cmd, key=KEY_PATH, timeout=60):
     """Run a command on a remote host via SSH."""
-    return subprocess.run(
-        ['ssh',
-         '-i', key,
-         '-o', 'StrictHostKeyChecking=no',
-         '-o', 'BatchMode=yes',
-         '-o', f'ConnectTimeout=10',
-         f'{user}@{ip}',
-         cmd],
-        capture_output=True, text=True, timeout=timeout
-    )
+    try:
+        return subprocess.run(
+            ['ssh',
+             '-i', key,
+             '-o', 'StrictHostKeyChecking=no',
+             '-o', 'BatchMode=yes',
+             '-o', 'ConnectTimeout=10',
+             '-o', 'IdentitiesOnly=yes',
+             f'{user}@{ip}',
+             cmd],
+            capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        class _R:
+            returncode = 1
+            stdout = ''
+            stderr = f'Connection timed out after {timeout}s'
+        return _R()
 
 def scp_put(local, remote_user, remote_ip, remote_path, key=KEY_PATH):
     """Upload a file to a remote host."""
-    return subprocess.run(
-        ['scp',
-         '-i', key,
-         '-o', 'StrictHostKeyChecking=no',
-         '-o', 'BatchMode=yes',
-         local,
-         f'{remote_user}@{remote_ip}:{remote_path}'],
-        capture_output=True, text=True, timeout=30
-    )
+    try:
+        return subprocess.run(
+            ['scp',
+             '-i', key,
+             '-o', 'StrictHostKeyChecking=no',
+             '-o', 'BatchMode=yes',
+             '-o', 'IdentitiesOnly=yes',
+             local,
+             f'{remote_user}@{remote_ip}:{remote_path}'],
+            capture_output=True, text=True, timeout=30
+        )
+    except subprocess.TimeoutExpired:
+        class _R:
+            returncode = 1
+            stdout = ''
+            stderr = 'SCP upload timed out'
+        return _R()
 
 def scp_get(remote_user, remote_ip, remote_path, local_dir, key=KEY_PATH):
     """Download a file from a remote host."""
@@ -236,7 +252,11 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(collect_node, n, args.report): n for n in nodes}
         for f in as_completed(futures):
-            results.append(f.result())
+            try:
+                results.append(f.result())
+            except Exception as e:
+                node = futures[f]
+                results.append({'node': node.get('name','unknown'), 'status': 'exception', 'ip': node.get('host','?'), 'error': str(e)})
 
     # Summary
     ok      = [r for r in results if r['status'] == 'ok']
