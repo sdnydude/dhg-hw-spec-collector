@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-DHG SNMP Collector — pysnmp v4/v6 compatible + CLI fallback
+DHG SNMP Collector — uses puresnmp (synchronous, no legacy deps)
 Usage:
     python3 fleet/collect_snmp.py
     python3 fleet/collect_snmp.py --host 10.0.0.4
+    python3 fleet/collect_snmp.py --community public
 """
 import argparse, csv, datetime, subprocess, sys
 from pathlib import Path
@@ -19,11 +20,11 @@ SWITCHES = [
 ]
 
 OIDS = {
-    'sysDescr':     '1.3.6.1.2.1.1.1.0',
-    'sysName':      '1.3.6.1.2.1.1.5.0',
-    'sysLocation':  '1.3.6.1.2.1.1.6.0',
-    'sysUpTime':    '1.3.6.1.2.1.1.3.0',
-    'ifNumber':     '1.3.6.1.2.1.2.1.0',
+    'sysDescr':    '1.3.6.1.2.1.1.1.0',
+    'sysName':     '1.3.6.1.2.1.1.5.0',
+    'sysLocation': '1.3.6.1.2.1.1.6.0',
+    'sysUpTime':   '1.3.6.1.2.1.1.3.0',
+    'ifNumber':    '1.3.6.1.2.1.2.1.0',
     'ng_model':     '1.3.6.1.4.1.4526.10.1.1.1.1.3.1',
     'ng_swVersion': '1.3.6.1.4.1.4526.10.1.1.1.1.4.1',
     'ng_hwVersion': '1.3.6.1.4.1.4526.10.1.1.1.1.5.1',
@@ -40,40 +41,26 @@ IF_OIDS = {
 IF_STATUS = {1:'up', 2:'down', 3:'testing', 4:'unknown', 5:'dormant'}
 
 
-def get_api():
+def ensure_puresnmp():
     try:
-        from pysnmp.hlapi import getCmd, SnmpEngine  # noqa
-        return 'v4'
-    except Exception:
-        pass
-    return 'cli'
-
-
-def install_pysnmp():
-    print('[SNMP] Installing pysnmp...')
-    for flag in ['--user', '--break-system-packages']:
-        r = subprocess.run(
-            [sys.executable, '-m', 'pip', 'install', 'pysnmp', flag, '-q'],
-            capture_output=True)
-        if r.returncode == 0:
-            return
+        import puresnmp  # noqa
+        return True
+    except ImportError:
+        print('[SNMP] Installing puresnmp...')
+        for flag in ['--user', '--break-system-packages']:
+            r = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', 'puresnmp', flag, '-q'],
+                capture_output=True)
+            if r.returncode == 0:
+                return True
+        return False
 
 
 def snmp_get(host, community, oid, timeout=3):
     try:
-        from pysnmp.hlapi import (getCmd, SnmpEngine, CommunityData,
-                                   UdpTransportTarget, ContextData,
-                                   ObjectType, ObjectIdentity)
-        ei, es, _, vbs = next(getCmd(
-            SnmpEngine(),
-            CommunityData(community, mpModel=0),
-            UdpTransportTarget((host, 161), timeout=timeout, retries=1),
-            ContextData(),
-            ObjectType(ObjectIdentity(oid))
-        ))
-        if ei or es or not vbs:
-            return None
-        return str(vbs[0][1])
+        from puresnmp import get
+        val = get(host, community, oid, timeout=timeout)
+        return str(val) if val is not None else None
     except Exception:
         return None
 
@@ -81,21 +68,10 @@ def snmp_get(host, community, oid, timeout=3):
 def snmp_walk(host, community, oid, timeout=3):
     results = {}
     try:
-        from pysnmp.hlapi import (nextCmd, SnmpEngine, CommunityData,
-                                   UdpTransportTarget, ContextData,
-                                   ObjectType, ObjectIdentity)
-        for ei, es, _, vbs in nextCmd(
-            SnmpEngine(),
-            CommunityData(community, mpModel=0),
-            UdpTransportTarget((host, 161), timeout=timeout, retries=1),
-            ContextData(),
-            ObjectType(ObjectIdentity(oid)),
-            lexicographicMode=False
-        ):
-            if ei or es:
-                break
-            for vb in vbs:
-                results[str(vb[0]).split('.')[-1]] = str(vb[1])
+        from puresnmp import walk
+        for item in walk(host, community, oid, timeout=timeout):
+            idx = str(item.oid).split('.')[-1]
+            results[idx] = str(item.value)
     except Exception:
         pass
     return results
@@ -108,11 +84,12 @@ def collect_switch(switch, community):
     ts   = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     def row(cat, key, val, unit=''):
-        rows.append({'category':cat,'key':key,
-                     'value':str(val) if val else '','unit':unit,'source':'snmp'})
+        rows.append({'category': cat, 'key': key,
+                     'value': str(val) if val else '', 'unit': unit, 'source': 'snmp'})
 
     print(f'  · {name:36s} polling {host}...')
 
+    # System OIDs
     for key, oid in OIDS.items():
         if key.startswith('ng_') or key == 'ifNumber':
             continue
@@ -126,24 +103,27 @@ def collect_switch(switch, community):
                     pass
             row('System', key, val)
 
+    # NETGEAR OIDs
     for key, oid in OIDS.items():
         if not key.startswith('ng_'):
             continue
         val = snmp_get(host, community, oid)
         if val:
-            row('Hardware', key.replace('ng_',''), val)
+            row('Hardware', key.replace('ng_', ''), val)
 
-    row('Interfaces', 'total_interfaces', snmp_get(host, community, OIDS['ifNumber']) or '0')
+    row('Interfaces', 'total_interfaces',
+        snmp_get(host, community, OIDS['ifNumber']) or '0')
 
+    # Interface walk
     if_data = {k: snmp_walk(host, community, v) for k, v in IF_OIDS.items()}
     up = down = 0
     for idx, descr in if_data['ifDescr'].items():
         try:
-            status = IF_STATUS.get(int(if_data['ifOperStatus'].get(idx,'2')), 'unknown')
+            status = IF_STATUS.get(int(if_data['ifOperStatus'].get(idx, '2')), 'unknown')
         except Exception:
             status = 'unknown'
         try:
-            mbps = int(if_data['ifSpeed'].get(idx,'0')) // 1_000_000
+            mbps = int(if_data['ifSpeed'].get(idx, '0')) // 1_000_000
             speed = f'{mbps} Mbps' if mbps else '—'
         except Exception:
             speed = '—'
@@ -152,7 +132,7 @@ def collect_switch(switch, community):
         row('Interfaces', f'port{idx}_speed',      speed)
         row('Interfaces', f'port{idx}_in_octets',  if_data['ifInOctets'].get(idx,'0'),  'bytes')
         row('Interfaces', f'port{idx}_out_octets', if_data['ifOutOctets'].get(idx,'0'), 'bytes')
-        if status == 'up':   up += 1
+        if status == 'up':    up += 1
         elif status == 'down': down += 1
 
     row('Interfaces', 'ports_up',   str(up))
@@ -166,7 +146,8 @@ def collect_switch(switch, community):
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f'  ✓ {name:36s} {len(rows)} rows  (up:{up} down:{down})  → {csv_path.name}')
+    print(f'  {"✓" if rows else "✗"} {name:36s} {len(rows)} rows  (up:{up} down:{down})  '
+          f'→ {csv_path.name}')
     return csv_path
 
 
@@ -176,12 +157,10 @@ def main():
     parser.add_argument('--host',      '-H', default=None)
     args = parser.parse_args()
 
-    api = get_api()
-    if api == 'cli':
-        install_pysnmp()
-        api = get_api()
+    if not ensure_puresnmp():
+        print('[SNMP] ERROR: could not install puresnmp'); sys.exit(1)
 
-    print(f'\n[DHG SNMP] API: {api}  community: {args.community}\n')
+    print(f'\n[DHG SNMP] community: {args.community}\n')
     FLEET_OUT.mkdir(parents=True, exist_ok=True)
 
     targets = SWITCHES
